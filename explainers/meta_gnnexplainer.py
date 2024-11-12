@@ -86,5 +86,33 @@ class MetaGNNGExplainer(torch.nn.Module):
 
         return edge_mask
 
+    def explain_node(self, graph,idx):
+
+        self._clear_masks()
+
+        # get the initial prediction.
+        with torch.no_grad():
+            log_logits = self.model.forward_explain(graph)[idx,:]
+            pred_label = log_logits.argmax(dim=-1)
+
+        self._set_masks(graph.x, graph.edge_index)
+        self.to(graph.x.device)
+
+        optimizer = torch.optim.Adam([self.edge_mask], lr=self.lr)
+
+        for epoch in range(1, self.epochs + 1):
+
+            optimizer.zero_grad()
+            log_logits = self.model.forward_explain(graph)[idx,:].view(1,-1)
+            # log_logits = self.model(graph.x,graph.edge_index,graph.batch)[idx,:].view(1,-1)
+            loss = self._loss(log_logits, pred_label)
+            loss.backward()
+            optimizer.step()
+
+        edge_mask = self.edge_mask.detach().sigmoid()
+        self._clear_masks()
+
+        return edge_mask
+
     def __repr__(self):
         return f'{self.__class__.__name__}()'
